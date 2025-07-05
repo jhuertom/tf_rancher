@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rancher-ingress
+  namespace: cattle-system
+  annotations:
+    kubernetes.io/ingress.class: haproxy
+    haproxy.org/ssl-redirect: "true"
+    haproxy.org/load-balance: "roundrobin"
+    haproxy.org/check: "true"
+    haproxy.org/check-http: "/ping"
+    haproxy.org/request-set-header: |
+      X-Forwarded-Proto https
+      X-Forwarded-Port 443
+
+spec:
+  rules:
+  - host: rancher.jhmk8s.duckdns.org
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: rancher
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - rancher.jhmk8s.duckdns.org
+    secretName: rancher-tls
