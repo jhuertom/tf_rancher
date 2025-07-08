@@ -1,4 +1,3 @@
-# 1. Instalar cert-manager (prerrequisito para Rancher)
 resource "helm_release" "cert_manager" {
   name       = "cert-manager"
   repository = "https://charts.jetstack.io"
@@ -18,7 +17,6 @@ resource "helm_release" "cert_manager" {
   }
 }
 
-# 2. Instalar Rancher
 resource "helm_release" "rancher" {
   name       = "rancher"
   repository = "https://releases.rancher.com/server-charts/latest"
@@ -37,8 +35,19 @@ resource "helm_release" "rancher" {
       
       # Configuración de ingress y TLS
       ingress = {
+        ingressClassName = "haproxy"
         tls = {
           source = "letsEncrypt"
+        }
+        extraAnnotations = {
+          "haproxy.org/ssl-redirect"       = "true"
+          "haproxy.org/load-balance"       = "roundrobin"
+          "haproxy.org/check"              = "true"
+          "haproxy.org/check-http"         = "/ping"
+          "haproxy.org/request-set-header" = <<-EOT
+            X-Forwarded-Proto https
+            X-Forwarded-Port 443
+          EOT
         }
       }
       
@@ -80,28 +89,45 @@ resource "helm_release" "rancher" {
   wait_for_jobs = true
 }
 
-# Outputs
-output "rancher_url" {
-  description = "URL para acceder a Rancher"
-  value       = "https://${var.rancher_hostname}"
+resource "kubernetes_namespace" "haproxy_controller" {
+  metadata {
+    name = "haproxy-controller"
+    labels = {
+      "pod-security.kubernetes.io/enforce" = "privileged"
+      "pod-security.kubernetes.io/audit"   = "privileged"
+      "pod-security.kubernetes.io/warn"    = "privileged"
+    }
+  }
 }
 
-output "rancher_bootstrap_password" {
-  description = "Contraseña inicial de Rancher"
-  value       = var.rancher_bootstrap_password
-  sensitive   = true
-}
+resource "helm_release" "haproxy_ingress" {
+  name       = "haproxy-ingress"
+  repository = "https://haproxytech.github.io/helm-charts"
+  chart      = "kubernetes-ingress"
+  namespace  = kubernetes_namespace.haproxy_controller.metadata[0].name
+  create_namespace = false
+  depends_on = [helm_release.rancher, kubernetes_namespace.haproxy_controller]
 
-output "installation_notes" {
-  description = "Notas de instalación"
-  value = <<EOF
-Rancher ha sido instalado exitosamente!
+  set {
+    name  = "controller.service.nodePorts.http"
+    value = 32757
+  }
 
-1. Accede a Rancher en: https://${var.rancher_hostname}
-2. Usuario: admin
-3. Contraseña: ${var.rancher_bootstrap_password}
+  set {
+    name  = "controller.service.nodePorts.https"
+    value = 30417
+  }
 
-Verifica que tu DNS apunte a tu ingress controller.
-EOF
-  sensitive = true
+  set {
+    name  = "controller.service.nodePorts.stat"
+    value = 30958
+  }
+
+  set {
+    name  = "controller.service.nodePorts.prometheus"
+    value = 30003
+  }
+
+  timeout = 300
+  wait = true
 }

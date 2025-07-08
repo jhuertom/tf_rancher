@@ -21,12 +21,13 @@ helm repo add haproxy-ingress https://haproxy-ingress.github.io/charts
 helm repo update
 
 # Instalar HAProxy Ingress Controller
-helm install haproxy-ingress haproxy-ingress/haproxy-ingress \
+helm install haproxy-kubernetes-ingress haproxytech/kubernetes-ingress \
   --create-namespace \
   --namespace haproxy-controller \
-  --set controller.hostNetwork=true \
-  --set controller.kind=DaemonSet \
-  --set controller.ingressClass=haproxy
+  --set controller.service.nodePorts.http=32757 \
+  --set controller.service.nodePorts.https=30417 \
+  --set controller.service.nodePorts.stat=30958 \
+  --set controller.service.nodePorts.prometheus=30003
 
 #### ################################################################################################
 http:80►32757 https:443►30417 quic:443►30417╱UDP stat:1024►30958 admin:6060►31964
